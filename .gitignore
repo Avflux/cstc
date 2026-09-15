@@ -1,0 +1,3 @@
+# Local build artifacts and root-level npm output
+/dev
+/package-lock.json
