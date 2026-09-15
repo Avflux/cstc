@@ -17,7 +17,7 @@ export default function TelemetrySummary({ avgVoltage, peakCurrent, activeNodes,
           <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400">{avgVoltage}</span>
         </div>
         <div className={`p-2 rounded border ${isDark ? 'bg-[#111928] border-[#1d293d]' : 'bg-white border-slate-200'}`}>
-          <span className={`block text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pico K(mA)</span>
+          <span className={`block text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pico I(mA)</span>
           <span className="text-xs font-mono font-bold text-blue-500 dark:text-blue-400">{peakCurrent}</span>
         </div>
         <div className={`p-2 rounded border ${isDark ? 'bg-[#111928] border-[#1d293d]' : 'bg-white border-slate-200'}`}>

@@ -8,6 +8,12 @@ import { initialNodes, initialEdges } from './data/initialData'
 
 let nodeCounter = 0
 
+function formatCoordVal(val) {
+  if (val >= 100) return val.toFixed(1)
+  if (val >= 10) return val.toFixed(2)
+  return val.toFixed(3)
+}
+
 function AppContent() {
   const [nodes, setNodes] = useState(() => JSON.parse(JSON.stringify(initialNodes)))
   const [edges, setEdges] = useState(() => JSON.parse(JSON.stringify(initialEdges)))
@@ -18,11 +24,15 @@ function AppContent() {
   const [triggerRedraw, setTriggerRedraw] = useState(0)
   const [placementMode, setPlacementMode] = useState(false)
   const [loadedImage, setLoadedImage] = useState(null)
+  const [imageAdjustMode, setImageAdjustMode] = useState(false)
+  const [imageOpacity, setImageOpacity] = useState(0.5)
 
   const measurements = nodes.map((node) => ({
     id: `${node.id} - ${node.label}`,
-    u: node.u.toFixed(1),
-    k: node.k.toFixed(1),
+    u: formatCoordVal(node.u),
+    k: formatCoordVal(node.k),
+    rawU: node.u,
+    rawK: node.k,
     bay1: false,
   }))
 
@@ -34,17 +44,22 @@ function AppContent() {
     triggerRedraw,
     placementMode, onPlaceNode: handlePlaceNode,
     loadedImage,
+    imageAdjustMode,
+    imageOpacity,
   })
 
   const handleResetZoom = graphControls.resetZoom
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') setPlacementMode(false)
+      if (e.key === 'Escape') {
+        if (placementMode) setPlacementMode(false)
+        if (imageAdjustMode) setImageAdjustMode(false)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [placementMode, imageAdjustMode])
 
   const handleResetGraph = () => {
     setNodes([]); setEdges([]); nodeCounter = 0
@@ -53,7 +68,18 @@ function AppContent() {
   }
 
   const togglePlacementMode = () => {
+    if (!placementMode && imageAdjustMode) {
+      setImageAdjustMode(false)
+    }
     setPlacementMode((prev) => !prev)
+  }
+
+  const toggleImageAdjustMode = (val) => {
+    const nextVal = typeof val === 'boolean' ? val : !imageAdjustMode
+    if (nextVal && placementMode) {
+      setPlacementMode(false)
+    }
+    setImageAdjustMode(nextVal)
   }
 
   function handlePlaceNode(k, u) {
@@ -61,11 +87,35 @@ function AppContent() {
     const newNode = {
       id: `N${nodeCounter.toString().padStart(2, '0')}`,
       label: `Ponto ${nodeCounter}`,
-      k: parseFloat(k.toFixed(1)),
-      u: parseFloat(u.toFixed(1)),
+      k: parseFloat(k),
+      u: parseFloat(u),
       bay1: false,
     }
     setNodes((prev) => [...prev, newNode])
+    setTriggerRedraw((n) => n + 1)
+  }
+
+  function handleAddManualMeasurement(u, io) {
+    nodeCounter++
+    const newNode = {
+      id: `N${nodeCounter.toString().padStart(2, '0')}`,
+      label: `Ponto ${nodeCounter}`,
+      k: parseFloat(io),
+      u: parseFloat(u),
+      bay1: false,
+    }
+    setNodes((prev) => [...prev, newNode])
+    setTriggerRedraw((n) => n + 1)
+  }
+
+  function handleDeleteNode(idx) {
+    setNodes((prev) => prev.filter((_, i) => i !== idx))
+    setEdges((prev) =>
+      prev
+        .filter(([i, j]) => i !== idx && j !== idx)
+        .map(([i, j]) => [i > idx ? i - 1 : i, j > idx ? j - 1 : j])
+    )
+    setHighlightedNodeIndex(null)
     setTriggerRedraw((n) => n + 1)
   }
 
@@ -96,6 +146,7 @@ function AppContent() {
           const img = new Image()
           img.onload = () => {
             setLoadedImage(img)
+            setImageAdjustMode(true) // Automatically activate adjust mode to allow initial fitting
             setTriggerRedraw((n) => n + 1)
           }
           img.src = ev.target.result
@@ -108,15 +159,16 @@ function AppContent() {
 
   const handleRemoveImage = () => {
     setLoadedImage(null)
+    setImageAdjustMode(false)
     setTriggerRedraw((n) => n + 1)
   }
 
   const handleExport = () => {
-    let csv = 'data:text/csv;charset=utf-8,Pontos Medicao,U(V),K(mA)\n'
+    let csv = 'data:text/csv;charset=utf-8,Pontos Medicao,U(V),Io(mA)\n'
     measurements.forEach((r) => { csv += `"${r.id}",${r.u},${r.k}\n` })
     const link = document.createElement('a')
     link.setAttribute('href', encodeURI(csv))
-    link.setAttribute('download', 'medicoes_subestacao_bay1.csv')
+    link.setAttribute('download', 'medicoes_curva_excitacao.csv')
     document.body.appendChild(link); link.click(); document.body.removeChild(link)
   }
 
@@ -138,6 +190,9 @@ function AppContent() {
             placementMode={placementMode}
             nodeCount={nodes.length}
             edgeCount={edges.length}
+            loadedImage={loadedImage}
+            imageAdjustMode={imageAdjustMode}
+            onToggleImageAdjust={toggleImageAdjustMode}
           />
           <GraphCanvasView
             canvasRef={graphControls.canvasRef}
@@ -148,6 +203,12 @@ function AppContent() {
             placementMode={placementMode}
             loadedImage={loadedImage}
             onRemoveImage={handleRemoveImage}
+            imageAdjustMode={imageAdjustMode}
+            onToggleImageAdjust={toggleImageAdjustMode}
+            imageOpacity={imageOpacity}
+            onChangeImageOpacity={setImageOpacity}
+            onResetImageBounds={graphControls.resetImageBounds}
+            onZoomImage={graphControls.zoomImage}
           />
         </section>
 
@@ -155,6 +216,8 @@ function AppContent() {
         <MeasurementsSidebar
           measurements={measurements}
           onHighlightNode={handleHighlightFromTable}
+          onDeleteNode={handleDeleteNode}
+          onAddMeasurement={handleAddManualMeasurement}
         />
       </main>
     </div>
