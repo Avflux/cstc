@@ -13,11 +13,11 @@ function AppContent() {
   const [edges, setEdges] = useState(() => JSON.parse(JSON.stringify(initialEdges)))
   const [highlightedNodeIndex, setHighlightedNodeIndex] = useState(null)
   const [cursorK, setCursorK] = useState('0.0')
-  const [cursorU, setCursorU] = useState('226.0')
+  const [cursorU, setCursorU] = useState('0.0')
   const [zoomLevel, setZoomLevel] = useState('100%')
   const [triggerRedraw, setTriggerRedraw] = useState(0)
-
   const [placementMode, setPlacementMode] = useState(false)
+  const [loadedImage, setLoadedImage] = useState(null)
 
   const measurements = nodes.map((node) => ({
     id: `${node.id} - ${node.label}`,
@@ -33,6 +33,7 @@ function AppContent() {
     onZoomChange: (z) => setZoomLevel(z + '%'),
     triggerRedraw,
     placementMode, onPlaceNode: handlePlaceNode,
+    loadedImage,
   })
 
   const handleResetZoom = graphControls.resetZoom
@@ -82,13 +83,32 @@ function AppContent() {
     if (idx < nodes.length) graphControls.highlightNode(idx)
   }
 
+  // Image upload
   const handleImageUpload = () => {
     const input = document.createElement('input')
-    input.type = 'file'; input.accept = 'image/*'
+    input.type = 'file'
+    input.accept = 'image/*'
     input.onchange = (e) => {
-      if (e.target.files && e.target.files[0]) alert('Imagem selecionada: ' + e.target.files[0].name)
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0]
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          const img = new Image()
+          img.onload = () => {
+            setLoadedImage(img)
+            setTriggerRedraw((n) => n + 1)
+          }
+          img.src = ev.target.result
+        }
+        reader.readAsDataURL(file)
+      }
     }
     input.click()
+  }
+
+  const handleRemoveImage = () => {
+    setLoadedImage(null)
+    setTriggerRedraw((n) => n + 1)
   }
 
   const handleExport = () => {
@@ -126,6 +146,8 @@ function AppContent() {
             edgeCount={edges.length}
             nodes={nodes}
             placementMode={placementMode}
+            loadedImage={loadedImage}
+            onRemoveImage={handleRemoveImage}
           />
         </section>
 

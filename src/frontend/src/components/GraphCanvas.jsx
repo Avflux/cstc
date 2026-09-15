@@ -26,6 +26,7 @@ export default function GraphCanvas({
   nodes, edges, highlightedNodeIndex,
   onHighlightNode, onCursorMove, onZoomChange, triggerRedraw,
   placementMode, onPlaceNode,
+  loadedImage,
 }) {
   const canvasRef = useRef(null)
   const wrapperRef = useRef(null)
@@ -73,6 +74,20 @@ export default function GraphCanvas({
     ctx.fillStyle = isDark ? '#020408' : '#ffffff'
     ctx.fillRect(MARGIN.left, MARGIN.top, plotW, plotH)
 
+    // Clip to plot area for image and graph elements
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(MARGIN.left, MARGIN.top, plotW, plotH)
+    ctx.clip()
+
+    // Draw loaded image as background (stretched to plot area)
+    if (loadedImage) {
+      ctx.globalAlpha = 0.5
+      ctx.drawImage(loadedImage, MARGIN.left, MARGIN.top, plotW, plotH)
+      ctx.globalAlpha = 1.0
+    }
+
+    // Grid (drawn on top of image)
     const gridSubColor = isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'
     const gridMajorColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.09)'
     const axisBorderColor = isDark ? '#263347' : '#94a3b8'
@@ -107,63 +122,25 @@ export default function GraphCanvas({
       }
     }
 
-    // Major grid K
-    ctx.font = '10px "JetBrains Mono", monospace'
+    // Major grid lines K
     const startK = Math.floor(view.kMin / stepK) * stepK
     const endK = Math.ceil(view.kMax / stepK) * stepK
     for (let vk = startK; vk <= endK + stepK * 0.01; vk += stepK) {
       const pt = worldToScreen(vk, 0, rect)
       if (pt.x >= MARGIN.left && pt.x <= MARGIN.left + plotW) {
         ctx.beginPath(); ctx.strokeStyle = gridMajorColor; ctx.lineWidth = 1; ctx.moveTo(pt.x, MARGIN.top); ctx.lineTo(pt.x, MARGIN.top + plotH); ctx.stroke()
-        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 1.2; ctx.moveTo(pt.x, MARGIN.top + plotH); ctx.lineTo(pt.x, MARGIN.top + plotH + 5); ctx.stroke()
-        ctx.fillStyle = labelColor; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-        ctx.fillText(formatNumber(vk, stepK), pt.x, MARGIN.top + plotH + 8)
-      }
-    }
-    for (let vk = subStartK; vk <= subEndK; vk += subStepK) {
-      const pt = worldToScreen(vk, 0, rect)
-      if (pt.x >= MARGIN.left && pt.x <= MARGIN.left + plotW) {
-        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 0.8; ctx.moveTo(pt.x, MARGIN.top + plotH); ctx.lineTo(pt.x, MARGIN.top + plotH + 3); ctx.stroke()
       }
     }
 
-    // Major grid U
+    // Major grid lines U
     const startU = Math.floor(view.uMin / stepU) * stepU
     const endU = Math.ceil(view.uMax / stepU) * stepU
     for (let vu = startU; vu <= endU + stepU * 0.01; vu += stepU) {
       const pt = worldToScreen(0, vu, rect)
       if (pt.y >= MARGIN.top && pt.y <= MARGIN.top + plotH) {
         ctx.beginPath(); ctx.strokeStyle = gridMajorColor; ctx.lineWidth = 1; ctx.moveTo(MARGIN.left, pt.y); ctx.lineTo(MARGIN.left + plotW, pt.y); ctx.stroke()
-        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 1.2; ctx.moveTo(MARGIN.left - 5, pt.y); ctx.lineTo(MARGIN.left, pt.y); ctx.stroke()
-        ctx.fillStyle = labelColor; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
-        ctx.fillText(formatNumber(vu, stepU), MARGIN.left - 8, pt.y)
       }
     }
-    for (let vu = subStartU; vu <= subEndU; vu += subStepU) {
-      const pt = worldToScreen(0, vu, rect)
-      if (pt.y >= MARGIN.top && pt.y <= MARGIN.top + plotH) {
-        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 0.8; ctx.moveTo(MARGIN.left - 3, pt.y); ctx.lineTo(MARGIN.left, pt.y); ctx.stroke()
-      }
-    }
-
-    // Axis frame
-    ctx.strokeStyle = axisBorderColor; ctx.lineWidth = 1.5
-    ctx.strokeRect(MARGIN.left, MARGIN.top, plotW, plotH)
-
-    // Axis labels
-    ctx.fillStyle = isDark ? '#94a3b8' : '#334155'
-    ctx.font = '600 11px "JetBrains Mono", monospace'
-    ctx.save(); ctx.translate(14, MARGIN.top + plotH / 2); ctx.rotate(-Math.PI / 2)
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('U (V)', 0, 0)
-    ctx.restore()
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-    ctx.fillText('K (mA)', MARGIN.left + plotW / 2, MARGIN.top + plotH + 26)
-
-    // Clip graph elements
-    ctx.save()
-    ctx.beginPath()
-    ctx.rect(MARGIN.left, MARGIN.top, plotW, plotH)
-    ctx.clip()
 
     // Edges
     edges.forEach(([i, j]) => {
@@ -193,8 +170,56 @@ export default function GraphCanvas({
       ctx.fillText(node.id, pt.x + 7, pt.y - 4)
     })
 
+    ctx.restore() // end plot clip
+
+    // Ticks & Labels (drawn outside clip area)
+    ctx.font = '10px "JetBrains Mono", monospace'
+
+    // X Ticks & Labels (K)
+    for (let vk = startK; vk <= endK + stepK * 0.01; vk += stepK) {
+      const pt = worldToScreen(vk, 0, rect)
+      if (pt.x >= MARGIN.left && pt.x <= MARGIN.left + plotW) {
+        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 1.2; ctx.moveTo(pt.x, MARGIN.top + plotH); ctx.lineTo(pt.x, MARGIN.top + plotH + 5); ctx.stroke()
+        ctx.fillStyle = labelColor; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+        ctx.fillText(formatNumber(vk, stepK), pt.x, MARGIN.top + plotH + 8)
+      }
+    }
+    for (let vk = subStartK; vk <= subEndK; vk += subStepK) {
+      const pt = worldToScreen(vk, 0, rect)
+      if (pt.x >= MARGIN.left && pt.x <= MARGIN.left + plotW) {
+        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 0.8; ctx.moveTo(pt.x, MARGIN.top + plotH); ctx.lineTo(pt.x, MARGIN.top + plotH + 3); ctx.stroke()
+      }
+    }
+
+    // Y Ticks & Labels (U)
+    for (let vu = startU; vu <= endU + stepU * 0.01; vu += stepU) {
+      const pt = worldToScreen(0, vu, rect)
+      if (pt.y >= MARGIN.top && pt.y <= MARGIN.top + plotH) {
+        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 1.2; ctx.moveTo(MARGIN.left - 5, pt.y); ctx.lineTo(MARGIN.left, pt.y); ctx.stroke()
+        ctx.fillStyle = labelColor; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
+        ctx.fillText(formatNumber(vu, stepU), MARGIN.left - 8, pt.y)
+      }
+    }
+    for (let vu = subStartU; vu <= subEndU; vu += subStepU) {
+      const pt = worldToScreen(0, vu, rect)
+      if (pt.y >= MARGIN.top && pt.y <= MARGIN.top + plotH) {
+        ctx.beginPath(); ctx.strokeStyle = tickColor; ctx.lineWidth = 0.8; ctx.moveTo(MARGIN.left - 3, pt.y); ctx.lineTo(MARGIN.left, pt.y); ctx.stroke()
+      }
+    }
+
+    // Axis frame (outside clip)
+    ctx.strokeStyle = axisBorderColor; ctx.lineWidth = 1.5
+    ctx.strokeRect(MARGIN.left, MARGIN.top, plotW, plotH)
+
+    // Axis labels
+    ctx.fillStyle = isDark ? '#94a3b8' : '#334155'
+    ctx.font = '600 11px "JetBrains Mono", monospace'
+    ctx.save(); ctx.translate(14, MARGIN.top + plotH / 2); ctx.rotate(-Math.PI / 2)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('U (V)', 0, 0)
     ctx.restore()
-  }, [nodes, edges, highlightedNodeIndex, isDark, worldToScreen])
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+    ctx.fillText('K (mA)', MARGIN.left + plotW / 2, MARGIN.top + plotH + 26)
+  }, [nodes, edges, highlightedNodeIndex, isDark, worldToScreen, loadedImage])
 
   // Resize
   useEffect(() => {
@@ -324,7 +349,7 @@ export default function GraphCanvas({
   return { resetZoom, resetGraph, highlightNode, canvasRef, wrapperRef }
 }
 
-export function GraphCanvasView({ canvasRef, wrapperRef, nodeCount, edgeCount, nodes, placementMode }) {
+export function GraphCanvasView({ canvasRef, wrapperRef, nodeCount, edgeCount, nodes, placementMode, loadedImage, onRemoveImage }) {
   const { isDark } = useTheme()
 
   return (
@@ -350,6 +375,30 @@ export function GraphCanvasView({ canvasRef, wrapperRef, nodeCount, edgeCount, n
             <line x1="5" x2="19" y1="12" y2="12" />
           </svg>
           Clique para posicionar nós — pressione <kbd className="px-1.5 py-0.5 rounded bg-white/20 font-mono text-[10px]">Esc</kbd> para sair
+        </div>
+      )}
+
+      {/* Image loaded indicator + remove button */}
+      {loadedImage && (
+        <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2">
+          <div className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold shadow-lg backdrop-blur-sm flex items-center gap-2 ${isDark ? 'bg-slate-800/90 text-slate-300 border border-slate-600/50' : 'bg-white/90 text-slate-600 border border-slate-300'}`}>
+            <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <rect height="18" rx="2" ry="2" width="18" x="3" y="3" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+            Imagem de referência carregada
+          </div>
+          <button
+            onClick={onRemoveImage}
+            className={`p-1.5 rounded-lg shadow-lg backdrop-blur-sm transition ${isDark ? 'bg-red-900/80 hover:bg-red-800 text-red-300 border border-red-600/50' : 'bg-red-50/90 hover:bg-red-100 text-red-600 border border-red-200'}`}
+            title="Remover imagem"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <line x1="18" x2="6" y1="6" y2="18" />
+              <line x1="6" x2="18" y1="6" y2="18" />
+            </svg>
+          </button>
         </div>
       )}
 
