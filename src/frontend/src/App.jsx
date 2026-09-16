@@ -211,7 +211,10 @@ function AppContent() {
 
   return (
     <div className="h-screen max-h-screen w-screen max-w-screen overflow-hidden flex flex-col font-sans select-none bg-slate-50 text-slate-800 dark:bg-[#080c14] dark:text-slate-100 transition-colors duration-200">
-      <Header onImageUpload={handleImageUpload} onExport={handleExport} />
+      <Header
+        onImageUpload={handleImageUpload}
+        onExport={handleExport}
+      />
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden" style={{ minHeight: 0 }}>
         {/* Left - Graph */}
@@ -227,10 +230,15 @@ function AppContent() {
             placementMode={placementMode}
             nodeCount={nodes.length}
             edgeCount={edges.length}
-            loadedImage={loadedImage}
             imageAdjustMode={imageAdjustMode}
-            onToggleImageAdjust={toggleImageAdjustMode}
             calibrateMode={calibrateMode}
+            loadedImage={loadedImage}
+            onToggleImageAdjust={toggleImageAdjustMode}
+            onZoomImage={graphControls.zoomImage}
+            onResetImageBounds={graphControls.resetImageBounds}
+            imageOpacity={imageOpacity}
+            onChangeImageOpacity={setImageOpacity}
+            onRemoveImage={handleRemoveImage}
             onStartCalibrate={startCalibrate}
           />
           <GraphCanvasView
