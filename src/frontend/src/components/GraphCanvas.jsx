@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import { defaultView } from '../data/initialData'
 
@@ -17,6 +17,9 @@ export default function GraphCanvas({
   loadedImage,
   imageAdjustMode,
   imageOpacity = 0.5,
+  calibrateMode,
+  calibPoints,
+  onCalibClick,
 }) {
   const canvasRef = useRef(null)
   const wrapperRef = useRef(null)
@@ -220,6 +223,62 @@ export default function GraphCanvas({
       ctx.fillText(node.id, pt.x + 7, pt.y - 4)
     })
 
+    // Draw calibration points if in calibrate mode
+    if (calibrateMode && calibPoints && calibPoints.length > 0) {
+      const labels = ['O', 'X', 'Y']
+      const colors = ['#ef4444', '#10b981', '#3b82f6']
+      calibPoints.forEach((pt, i) => {
+        // Cross hair
+        ctx.save()
+        ctx.strokeStyle = colors[i]
+        ctx.lineWidth = 2
+        ctx.setLineDash([])
+        ctx.beginPath()
+        ctx.moveTo(pt.sx - 10, pt.sy)
+        ctx.lineTo(pt.sx + 10, pt.sy)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(pt.sx, pt.sy - 10)
+        ctx.lineTo(pt.sx, pt.sy + 10)
+        ctx.stroke()
+        // Circle
+        ctx.beginPath()
+        ctx.arc(pt.sx, pt.sy, 6, 0, Math.PI * 2)
+        ctx.strokeStyle = colors[i]
+        ctx.lineWidth = 2
+        ctx.stroke()
+        ctx.fillStyle = colors[i] + '40'
+        ctx.fill()
+        // Label
+        ctx.fillStyle = colors[i]
+        ctx.font = 'bold 12px "JetBrains Mono", monospace'
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(labels[i], pt.sx + 8, pt.sy - 4)
+        ctx.restore()
+      })
+
+      // Draw lines connecting O->X and O->Y if we have enough points
+      if (calibPoints.length >= 2) {
+        ctx.save()
+        ctx.setLineDash([4, 3])
+        ctx.lineWidth = 1.5
+        ctx.strokeStyle = '#ef4444'
+        ctx.beginPath()
+        ctx.moveTo(calibPoints[0].sx, calibPoints[0].sy)
+        ctx.lineTo(calibPoints[1].sx, calibPoints[1].sy)
+        ctx.stroke()
+        if (calibPoints.length === 3) {
+          ctx.strokeStyle = '#ef4444'
+          ctx.beginPath()
+          ctx.moveTo(calibPoints[0].sx, calibPoints[0].sy)
+          ctx.lineTo(calibPoints[2].sx, calibPoints[2].sy)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+    }
+
     ctx.restore() // end plot clip
 
     // Ticks & Labels (drawn outside clip area)
@@ -297,7 +356,7 @@ export default function GraphCanvas({
     ctx.restore()
     ctx.textAlign = 'center'; ctx.textBaseline = 'top'
     ctx.fillText('Io(mA)', MARGIN.left + plotW / 2, MARGIN.top + plotH + 26)
-  }, [nodes, edges, highlightedNodeIndex, isDark, worldToScreen, loadedImage, imageAdjustMode, imageOpacity])
+  }, [nodes, edges, highlightedNodeIndex, isDark, worldToScreen, loadedImage, imageAdjustMode, imageOpacity, calibrateMode, calibPoints])
 
   // Resize
   useEffect(() => {
@@ -349,6 +408,9 @@ export default function GraphCanvas({
       const dx = e.clientX - dragStartRef.current.x
       const dy = e.clientY - dragStartRef.current.y
       dragStartRef.current = { x: e.clientX, y: e.clientY }
+
+      // In calibrate mode, don't pan
+      if (calibrateMode) return
 
       // When placing nodes, prevent graph panning on left-drag so clicks are not displaced
       if (placementMode && !imageAdjustMode) return
@@ -404,6 +466,14 @@ export default function GraphCanvas({
       const sx = e.clientX - rect.left
       const sy = e.clientY - rect.top
 
+      // Handle calibration click
+      if (calibrateMode && isClick) {
+        if (sx >= MARGIN.left && sx <= rect.width - MARGIN.right && sy >= MARGIN.top && sy <= rect.height - MARGIN.bottom) {
+          onCalibClick && onCalibClick(sx, sy)
+        }
+        return
+      }
+
       if ((placementMode || e.shiftKey) && !imageAdjustMode && isClick) {
         if (sx >= MARGIN.left && sx <= rect.width - MARGIN.right && sy >= MARGIN.top && sy <= rect.height - MARGIN.bottom) {
           const world = screenToWorld(sx, sy, rect)
@@ -414,6 +484,9 @@ export default function GraphCanvas({
 
     const handleWheel = (e) => {
       e.preventDefault()
+      // Don't zoom while in calibrate mode
+      if (calibrateMode) return
+
       const rect = wrapper.getBoundingClientRect()
       const mouseX = e.clientX - rect.left
       const mouseY = e.clientY - rect.top
@@ -476,7 +549,7 @@ export default function GraphCanvas({
       window.removeEventListener('mouseup', handleMouseUp)
       wrapper.removeEventListener('wheel', handleWheel)
     }
-  }, [draw, screenToWorld, onCursorMove, onZoomChange, placementMode, onPlaceNode, imageAdjustMode, loadedImage])
+  }, [draw, screenToWorld, onCursorMove, onZoomChange, placementMode, onPlaceNode, imageAdjustMode, loadedImage, calibrateMode, onCalibClick])
 
   const resetZoom = useCallback(() => {
     viewRef.current = { ...defaultView }
@@ -532,28 +605,253 @@ export default function GraphCanvas({
     }
   }, [nodes, onHighlightNode, onCursorMove, draw])
 
-  return { resetZoom, resetGraph, resetImageBounds, zoomImage, highlightNode, canvasRef, wrapperRef }
+  /**
+   * Apply calibration: given 3 screen points (O, X, Y) and their real world values,
+   * recompute imageBoundsRef so the image aligns to the graph.
+   *
+   * O = origin point on the image (e.g. kMin_img, uMin_img)
+   * X = point on the X axis of the image at known kX value, same U as O
+   * Y = point on the Y axis of the image at known uY value, same K as O
+   *
+   * The image spans from (kO, uO) at pixel O to a computed max based on the scale ratio.
+   */
+  const applyCalibration = useCallback((calibPoints, realValues) => {
+    // calibPoints: [{sx,sy}, {sx,sy}, {sx,sy}]  (O, X, Y) in canvas screen coords
+    // realValues: { kO, uO, kX, uY }
+    // O — origin point on the image at world (kO, uO)
+    // X — point on same horizontal row as O at world (kX, uO)  [defines X scale]
+    // Y — point on same vertical column as O at world (kO, uY) [defines Y scale]
+
+    if (!loadedImage || !imageBoundsRef.current) return
+
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    const rect = wrapper.getBoundingClientRect()
+
+    const pO = calibPoints[0]  // screen pos of origin
+    const pX = calibPoints[1]  // screen pos of X-axis reference
+    const pY = calibPoints[2]  // screen pos of Y-axis reference
+
+    const { kO, uO, kX, uY } = realValues
+
+    // Log-space real-world distances
+    const logSpanK_real = Math.log10(Math.max(1e-6, kX)) - Math.log10(Math.max(1e-6, kO))
+    const logSpanU_real = Math.log10(Math.max(1e-6, uY)) - Math.log10(Math.max(1e-6, uO))
+
+    // Screen pixel distances between calibration points
+    const pixelSpanX = pX.sx - pO.sx   // horizontal pixels from O to X (should be positive)
+    const pixelSpanY = pO.sy - pY.sy   // vertical pixels from O to Y (pY is above pO so this should be positive)
+
+    if (Math.abs(pixelSpanX) < 2 || Math.abs(pixelSpanY) < 2) return // degenerate — points too close
+
+    // Screen pixels per log unit
+    const screenPixPerLogK = pixelSpanX / logSpanK_real
+    const screenPixPerLogU = pixelSpanY / logSpanU_real
+
+    // Current rendered image bounding box on screen
+    const ib = imageBoundsRef.current
+    const screenImgTL = worldToScreen(ib.kMin, ib.uMax, rect)
+    const screenImgBR = worldToScreen(ib.kMax, ib.uMin, rect)
+    const screenImgW = Math.max(1, screenImgBR.x - screenImgTL.x)
+    const screenImgH = Math.max(1, screenImgBR.y - screenImgTL.y)
+
+    // Log ranges the full image spans after calibration
+    const newImgLogK_range = screenImgW / screenPixPerLogK
+    const newImgLogU_range = screenImgH / screenPixPerLogU
+
+    // Anchor: point O in screen space tells us where world (kO, uO) maps to.
+    // Within the image, O is at offset (pO.sx - screenImgTL.x, pO.sy - screenImgTL.y).
+    // Fraction of image width/height where O sits:
+    const fracOx = (pO.sx - screenImgTL.x) / screenImgW
+    const fracOy = (pO.sy - screenImgTL.y) / screenImgH
+
+    const logKO = Math.log10(Math.max(1e-6, kO))
+    const logUO = Math.log10(Math.max(1e-6, uO))
+
+    // kMin of image = kO - (fraction of image to the left of O) * logK range
+    const newImgLogKMin = logKO - fracOx * newImgLogK_range
+    const newImgLogKMax = newImgLogKMin + newImgLogK_range
+
+    // uMin of image = uO - (fraction of image below O) * logU range
+    // fracOy is downward (0=top, 1=bottom), so fraction below O = (1 - fracOy)
+    // But wait: uMax is at TOP (y=screenImgTL.y), uMin is at BOTTOM (y=screenImgBR.y)
+    // So fracOy = 0 means O is at uMax, fracOy = 1 means O is at uMin.
+    // Fraction of U range above O = fracOy (in log terms O is fracOy * range from uMax)
+    // logUO = logUMax - fracOy * newImgLogU_range
+    // => logUMax = logUO + fracOy * newImgLogU_range
+    const newImgLogUMax = logUO + fracOy * newImgLogU_range
+    const newImgLogUMin = newImgLogUMax - newImgLogU_range
+
+    imageBoundsRef.current = {
+      kMin: Math.pow(10, newImgLogKMin),
+      kMax: Math.pow(10, newImgLogKMax),
+      uMin: Math.pow(10, newImgLogUMin),
+      uMax: Math.pow(10, newImgLogUMax),
+    }
+
+    draw()
+  }, [loadedImage, worldToScreen, draw])
+
+  return { resetZoom, resetGraph, resetImageBounds, zoomImage, highlightNode, applyCalibration, canvasRef, wrapperRef }
 }
 
+// ─── CalibrationDialog ────────────────────────────────────────────────────────
+function CalibrationDialog({ calibPoints, onConfirm, onCancel, isDark }) {
+  const pointCount = calibPoints.length
+  const labels = ['O (Origem)', 'X (Eixo Io)', 'Y (Eixo U)']
+  const colors = ['text-red-500', 'text-emerald-500', 'text-blue-500']
+  const descriptions = [
+    'Ponto de origem: canto inferior-esquerdo do gráfico na imagem',
+    'Ponto no eixo X: mesmo nível vertical de O, num valor conhecido de Io(mA)',
+    'Ponto no eixo Y: mesma coluna horizontal de O, num valor conhecido de U(V)',
+  ]
+
+  const [kO, setKO] = useState('1')
+  const [uO, setUO] = useState('1')
+  const [kX, setKX] = useState('10000')
+  const [uY, setUY] = useState('10000')
+
+  const inputClass = `w-full px-2 py-1.5 rounded border text-xs font-mono ${
+    isDark
+      ? 'bg-slate-900 border-slate-600 text-slate-200 focus:border-blue-500 focus:outline-none'
+      : 'bg-white border-slate-300 text-slate-800 focus:border-blue-500 focus:outline-none'
+  }`
+  const labelClass = `text-[10px] font-medium mb-0.5 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`
+
+  const canConfirm = pointCount === 3
+
+  const handleConfirm = () => {
+    onConfirm({
+      kO: parseFloat(kO) || 1,
+      uO: parseFloat(uO) || 1,
+      kX: parseFloat(kX) || 10000,
+      uY: parseFloat(uY) || 10000,
+    })
+  }
+
+  return (
+    <div className={`absolute bottom-4 right-4 z-30 rounded-xl shadow-2xl border w-72 ${
+      isDark ? 'bg-slate-900/98 border-slate-700 text-slate-200' : 'bg-white/98 border-slate-300 text-slate-800'
+    }`}>
+      {/* Header */}
+      <div className={`px-4 py-2.5 border-b rounded-t-xl flex items-center gap-2 ${isDark ? 'border-slate-700 bg-slate-800/60' : 'border-slate-200 bg-slate-50'}`}>
+        <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+          <path d="M2 17l10 5 10-5" />
+          <path d="M2 12l10 5 10-5" />
+        </svg>
+        <span className="text-xs font-bold">Calibração de Imagem</span>
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        {/* Step indicator */}
+        <div className="flex items-center gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-1">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${
+                i < pointCount
+                  ? i === 0 ? 'bg-red-500 border-red-500 text-white'
+                    : i === 1 ? 'bg-emerald-500 border-emerald-500 text-white'
+                    : 'bg-blue-500 border-blue-500 text-white'
+                  : i === pointCount
+                    ? isDark ? 'border-slate-400 text-slate-400 animate-pulse' : 'border-slate-500 text-slate-500 animate-pulse'
+                    : isDark ? 'border-slate-600 text-slate-600' : 'border-slate-300 text-slate-400'
+              }`}>
+                {i < pointCount ? '✓' : i + 1}
+              </div>
+              {i < 2 && <div className={`w-6 h-px ${i < pointCount - 1 ? 'bg-slate-400' : isDark ? 'bg-slate-700' : 'bg-slate-200'}`} />}
+            </div>
+          ))}
+          <span className="ml-1 text-[10px] text-slate-500">
+            {pointCount < 3 ? `Clique ponto ${labels[pointCount]} no gráfico` : 'Informe os valores reais'}
+          </span>
+        </div>
+
+        {/* Current step description */}
+        {pointCount < 3 && (
+          <div className={`text-[11px] px-2.5 py-2 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
+            <span className={`font-bold ${colors[pointCount]}`}>{labels[pointCount]}:</span>{' '}
+            {descriptions[pointCount]}
+          </div>
+        )}
+
+        {/* Real values inputs — shown when all 3 points placed */}
+        {pointCount === 3 && (
+          <div className="space-y-2">
+            <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Informe os valores reais de cada ponto de referência:
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelClass}>Io O (mA)</label>
+                <input type="number" value={kO} onChange={e => setKO(e.target.value)} className={inputClass} placeholder="ex: 1" />
+              </div>
+              <div>
+                <label className={labelClass}>U O (V)</label>
+                <input type="number" value={uO} onChange={e => setUO(e.target.value)} className={inputClass} placeholder="ex: 1" />
+              </div>
+              <div>
+                <label className={`${labelClass} text-emerald-500`}>Io X (mA)</label>
+                <input type="number" value={kX} onChange={e => setKX(e.target.value)} className={inputClass} placeholder="ex: 10000" />
+              </div>
+              <div>
+                <label className={`${labelClass} text-blue-500`}>U Y (V)</label>
+                <input type="number" value={uY} onChange={e => setUY(e.target.value)} className={inputClass} placeholder="ex: 10000" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer buttons */}
+      <div className={`px-4 py-2.5 border-t flex items-center justify-between gap-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+        <button
+          onClick={onCancel}
+          className={`px-3 py-1.5 rounded text-xs font-medium transition active:scale-95 ${
+            isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300'
+          }`}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleConfirm}
+          disabled={!canConfirm}
+          className={`px-3 py-1.5 rounded text-xs font-bold transition active:scale-95 ${
+            canConfirm
+              ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-sm shadow-purple-500/20'
+              : isDark ? 'bg-slate-800 text-slate-600 border border-slate-700 cursor-not-allowed' : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+          }`}
+        >
+          Enquadrar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── GraphCanvasView ──────────────────────────────────────────────────────────
 export function GraphCanvasView({
   canvasRef, wrapperRef, nodeCount, edgeCount, nodes,
   placementMode, loadedImage, onRemoveImage,
   imageAdjustMode, onToggleImageAdjust,
   imageOpacity, onChangeImageOpacity,
   onResetImageBounds, onZoomImage,
+  calibrateMode, calibPoints, onCancelCalibrate, onApplyCalibrate,
 }) {
   const { isDark } = useTheme()
 
-  const cursorClass = placementMode
+  const cursorClass = calibrateMode
     ? 'cursor-crosshair'
-    : imageAdjustMode
-      ? 'cursor-move'
-      : 'graph-canvas'
+    : placementMode
+      ? 'cursor-crosshair'
+      : imageAdjustMode
+        ? 'cursor-move'
+        : 'graph-canvas'
 
   return (
     <div className={`relative w-full h-full flex-1 ${isDark ? 'bg-[#05070d]' : 'bg-slate-100'}`} ref={wrapperRef} style={{ minHeight: 0 }}>
       {/* Legend */}
-      <div className="absolute top-4 left-16 z-10 flex items-center gap-2.5 px-2.5 py-1 text-xs pointer-events-none select-none">
+      <div className="absolute top-8 left-16 z-10 flex items-center gap-2.5 px-2.5 py-1 text-xs pointer-events-none select-none">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
           <span className={`font-mono text-[11px] ${isDark ? 'text-slate-200' : 'text-slate-600'}`}>{nodeCount} nós</span>
@@ -588,6 +886,30 @@ export function GraphCanvasView({
             className="px-2.5 py-1 rounded bg-white text-amber-900 font-bold text-[11px] shadow hover:bg-amber-100 active:scale-95 transition"
           >
             Bloquear no Grafo (Esc)
+          </button>
+        </div>
+      )}
+
+      {/* Calibrate mode banner */}
+      {calibrateMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-lg bg-purple-700/95 text-white text-xs font-semibold shadow-lg backdrop-blur-sm flex items-center gap-3">
+          <svg className="w-4 h-4 shrink-0 text-purple-200" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+          <span>
+            Modo Calibração — Clique os 3 pontos de referência na imagem&nbsp;
+            {calibPoints.length === 0 && <strong className="text-red-300">① Origem (O)</strong>}
+            {calibPoints.length === 1 && <strong className="text-emerald-300">② Eixo X</strong>}
+            {calibPoints.length === 2 && <strong className="text-blue-300">③ Eixo Y</strong>}
+            {calibPoints.length === 3 && <strong className="text-yellow-300">✓ Preencha os valores →</strong>}
+          </span>
+          <button
+            onClick={onCancelCalibrate}
+            className="px-2.5 py-1 rounded bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] shadow active:scale-95 transition"
+          >
+            Esc
           </button>
         </div>
       )}
@@ -709,6 +1031,16 @@ export function GraphCanvasView({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Calibration dialog */}
+      {calibrateMode && (
+        <CalibrationDialog
+          calibPoints={calibPoints}
+          onConfirm={onApplyCalibrate}
+          onCancel={onCancelCalibrate}
+          isDark={isDark}
+        />
       )}
 
       <canvas ref={canvasRef} className={`w-full h-full block ${cursorClass}`} />

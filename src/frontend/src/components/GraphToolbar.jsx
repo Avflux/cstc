@@ -5,6 +5,7 @@ export default function GraphToolbar({
   cursorK, cursorU, zoomLevel,
   placementMode, nodeCount, edgeCount,
   loadedImage, imageAdjustMode, onToggleImageAdjust,
+  calibrateMode, onStartCalibrate,
 }) {
   const { isDark } = useTheme()
   const hasEnoughNodes = nodeCount >= 2
@@ -100,11 +101,37 @@ export default function GraphToolbar({
             {imageAdjustMode ? 'Ajustando Imagem' : 'Ajustar Imagem'}
           </button>
         )}
+
+        {loadedImage && (
+          <button
+            className={`px-3 py-1.5 rounded text-xs font-medium border shadow-sm transition flex items-center gap-1.5 ${
+              calibrateMode
+                ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 font-semibold shadow-purple-500/20 animate-pulse'
+                : isDark
+                  ? 'bg-black/70 hover:bg-slate-800 text-purple-400 border-slate-700/80 active:scale-95'
+                  : 'bg-white hover:bg-slate-50 text-purple-600 border-slate-300 active:scale-95'
+            }`}
+            title={calibrateMode ? 'Modo calibração ativo — clique 3 pontos na imagem' : 'Calibrar imagem: definir 3 pontos de referência para enquadrar com precisão'}
+            onClick={onStartCalibrate}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+            {calibrateMode ? 'Calibrando...' : 'Calibrar'}
+          </button>
+        )}
       </div>
 
       {/* Telemetry */}
       <div className={`flex items-center gap-2.5 px-3 py-1.5 rounded border shadow-sm text-[11px] font-mono ${isDark ? 'bg-black/70 border-slate-700/80 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
-        {imageAdjustMode ? (
+        {calibrateMode ? (
+          <span className="text-purple-400 font-semibold flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping inline-block" />
+            Modo Calibração
+          </span>
+        ) : imageAdjustMode ? (
           <span className="text-amber-500 font-semibold flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
             Modo Ajuste Imagem

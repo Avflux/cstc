@@ -26,6 +26,8 @@ function AppContent() {
   const [loadedImage, setLoadedImage] = useState(null)
   const [imageAdjustMode, setImageAdjustMode] = useState(false)
   const [imageOpacity, setImageOpacity] = useState(0.5)
+  const [calibrateMode, setCalibrateMode] = useState(false)
+  const [calibPoints, setCalibPoints] = useState([])
 
   const measurements = nodes.map((node) => ({
     id: `${node.id} - ${node.label}`,
@@ -35,6 +37,28 @@ function AppContent() {
     rawK: node.k,
     bay1: false,
   }))
+
+  // handlePlaceNode and handleCalibClick are declared as regular functions
+  // so they hoist above the GraphCanvas() hook call below.
+  function handlePlaceNode(k, u) {
+    nodeCounter++
+    const newNode = {
+      id: `N${nodeCounter.toString().padStart(2, '0')}`,
+      label: `Ponto ${nodeCounter}`,
+      k: parseFloat(k),
+      u: parseFloat(u),
+      bay1: false,
+    }
+    setNodes((prev) => [...prev, newNode])
+    setTriggerRedraw((n) => n + 1)
+  }
+
+  function handleCalibClick(sx, sy) {
+    setCalibPoints((prev) => {
+      if (prev.length >= 3) return prev
+      return [...prev, { sx, sy }]
+    })
+  }
 
   const graphControls = GraphCanvas({
     nodes, edges, highlightedNodeIndex,
@@ -46,6 +70,9 @@ function AppContent() {
     loadedImage,
     imageAdjustMode,
     imageOpacity,
+    calibrateMode,
+    calibPoints,
+    onCalibClick: handleCalibClick,
   })
 
   const handleResetZoom = graphControls.resetZoom
@@ -55,11 +82,12 @@ function AppContent() {
       if (e.key === 'Escape') {
         if (placementMode) setPlacementMode(false)
         if (imageAdjustMode) setImageAdjustMode(false)
+        if (calibrateMode) { setCalibrateMode(false); setCalibPoints([]) }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [placementMode, imageAdjustMode])
+  }, [placementMode, imageAdjustMode, calibrateMode])
 
   const handleResetGraph = () => {
     setNodes([]); setEdges([]); nodeCounter = 0
@@ -82,16 +110,23 @@ function AppContent() {
     setImageAdjustMode(nextVal)
   }
 
-  function handlePlaceNode(k, u) {
-    nodeCounter++
-    const newNode = {
-      id: `N${nodeCounter.toString().padStart(2, '0')}`,
-      label: `Ponto ${nodeCounter}`,
-      k: parseFloat(k),
-      u: parseFloat(u),
-      bay1: false,
-    }
-    setNodes((prev) => [...prev, newNode])
+  const startCalibrate = () => {
+    if (!loadedImage) return
+    setPlacementMode(false)
+    setImageAdjustMode(false)
+    setCalibPoints([])
+    setCalibrateMode(true)
+  }
+
+  const cancelCalibrate = () => {
+    setCalibrateMode(false)
+    setCalibPoints([])
+  }
+
+  const applyCalibrate = (realValues) => {
+    graphControls.applyCalibration(calibPoints, realValues)
+    setCalibrateMode(false)
+    setCalibPoints([])
     setTriggerRedraw((n) => n + 1)
   }
 
@@ -160,6 +195,8 @@ function AppContent() {
   const handleRemoveImage = () => {
     setLoadedImage(null)
     setImageAdjustMode(false)
+    setCalibrateMode(false)
+    setCalibPoints([])
     setTriggerRedraw((n) => n + 1)
   }
 
@@ -193,6 +230,8 @@ function AppContent() {
             loadedImage={loadedImage}
             imageAdjustMode={imageAdjustMode}
             onToggleImageAdjust={toggleImageAdjustMode}
+            calibrateMode={calibrateMode}
+            onStartCalibrate={startCalibrate}
           />
           <GraphCanvasView
             canvasRef={graphControls.canvasRef}
@@ -209,6 +248,10 @@ function AppContent() {
             onChangeImageOpacity={setImageOpacity}
             onResetImageBounds={graphControls.resetImageBounds}
             onZoomImage={graphControls.zoomImage}
+            calibrateMode={calibrateMode}
+            calibPoints={calibPoints}
+            onCancelCalibrate={cancelCalibrate}
+            onApplyCalibrate={applyCalibrate}
           />
         </section>
 
