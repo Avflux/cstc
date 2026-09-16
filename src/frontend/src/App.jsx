@@ -89,12 +89,6 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [placementMode, imageAdjustMode, calibrateMode])
 
-  const handleResetGraph = () => {
-    setNodes([]); setEdges([]); nodeCounter = 0
-    setHighlightedNodeIndex(null); setPlacementMode(false)
-    graphControls.resetGraph()
-  }
-
   const togglePlacementMode = () => {
     if (!placementMode && imageAdjustMode) {
       setImageAdjustMode(false)
@@ -221,7 +215,6 @@ function AppContent() {
         <section className="flex-1 lg:w-[68%] xl:w-[72%] flex flex-col overflow-hidden border-r border-slate-200 dark:border-[#1a2333] dark:bg-slate-900 bg-slate-200" style={{ minHeight: 0 }}>
           <GraphToolbar
             onResetZoom={handleResetZoom}
-            onResetGraph={handleResetGraph}
             onAddNode={togglePlacementMode}
             onBuildEdges={handleBuildEdges}
             cursorK={cursorK}

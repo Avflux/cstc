@@ -59,10 +59,10 @@ export default function Header({ onImageUpload, onExport }) {
         </div>
         <div>
           <h1 className={`text-base font-bold tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-            Sistema de Topologia e Medições Elétricas
+            Topologia e Medições Elétricas
           </h1>
           <p className={`text-xs hidden sm:block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Subestação SE-400kV • Barramento Principal • Topologia de Medições U(V) × K(mA)
+            U(V) × Io(mA)
           </p>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useTheme } from '../contexts/ThemeContext'
 
 export default function GraphToolbar({
-  onResetZoom, onResetGraph, onAddNode, onBuildEdges,
+  onResetZoom, onAddNode, onBuildEdges,
   cursorK, cursorU, zoomLevel,
   placementMode, nodeCount, edgeCount,
   imageAdjustMode, calibrateMode,
@@ -167,13 +167,6 @@ export default function GraphToolbar({
               <path d="M3 12a9 9 0 0 0 15 6.7l3-2.7" />
             </svg>
             Redefinir zoom
-          </button>
-
-          <button className={`${btnBase} ${btnDefault}`} onClick={onResetGraph}>
-            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-            </svg>
-            Resetar grafo
           </button>
 
           <button

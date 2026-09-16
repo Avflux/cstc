@@ -556,11 +556,6 @@ export default function GraphCanvas({
     onZoomChange(100); draw()
   }, [draw, onZoomChange])
 
-  const resetGraph = useCallback(() => {
-    viewRef.current = { ...defaultView }
-    onZoomChange(100); onHighlightNode(null); draw()
-  }, [draw, onZoomChange, onHighlightNode])
-
   const resetImageBounds = useCallback(() => {
     imageBoundsRef.current = { ...viewRef.current }
     draw()
@@ -692,7 +687,7 @@ export default function GraphCanvas({
     draw()
   }, [loadedImage, worldToScreen, draw])
 
-  return { resetZoom, resetGraph, resetImageBounds, zoomImage, highlightNode, applyCalibration, canvasRef, wrapperRef }
+  return { resetZoom, resetImageBounds, zoomImage, highlightNode, applyCalibration, canvasRef, wrapperRef }
 }
 
 // ─── CalibrationDialog ────────────────────────────────────────────────────────
