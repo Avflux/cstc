@@ -25,6 +25,7 @@ export default function GraphCanvas({
   const wrapperRef = useRef(null)
   const viewRef = useRef({ ...defaultView })
   const imageBoundsRef = useRef(null)
+  const calibrationRef = useRef(null) // Pontos/valores da calibração + enquadramento resultante
   const isDraggingRef = useRef(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
   const hasDraggedRef = useRef(false)
@@ -37,6 +38,8 @@ export default function GraphCanvas({
     } else if (!loadedImage) {
       imageBoundsRef.current = null
     }
+    // Imagem nova ou removida invalida a calibração salva
+    calibrationRef.current = null
   }, [loadedImage])
 
   // Log-log coordinate transformations
@@ -557,7 +560,12 @@ export default function GraphCanvas({
   }, [draw, onZoomChange])
 
   const resetImageBounds = useCallback(() => {
-    imageBoundsRef.current = { ...viewRef.current }
+    if (calibrationRef.current) {
+      // Com calibração: restaura o enquadramento calculado a partir dos pontos calibrados
+      imageBoundsRef.current = { ...calibrationRef.current.bounds }
+    } else {
+      imageBoundsRef.current = { ...viewRef.current }
+    }
     draw()
   }, [draw])
 
@@ -677,11 +685,20 @@ export default function GraphCanvas({
     const newImgLogUMax = logUO + fracOy * newImgLogU_range
     const newImgLogUMin = newImgLogUMax - newImgLogU_range
 
-    imageBoundsRef.current = {
+    const newBounds = {
       kMin: Math.pow(10, newImgLogKMin),
       kMax: Math.pow(10, newImgLogKMax),
       uMin: Math.pow(10, newImgLogUMin),
       uMax: Math.pow(10, newImgLogUMax),
+    }
+    imageBoundsRef.current = newBounds
+
+    // Salva os pontos, os valores reais e o enquadramento resultante,
+    // para que "Enquadrar" possa restaurá-lo de forma persistente
+    calibrationRef.current = {
+      points: calibPoints.map((p) => ({ sx: p.sx, sy: p.sy })),
+      values: { ...realValues },
+      bounds: { ...newBounds },
     }
 
     draw()

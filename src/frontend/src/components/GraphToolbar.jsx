@@ -95,7 +95,7 @@ export default function GraphToolbar({
           <button
             onClick={onResetImageBounds}
             className={`${btnBase} ${btnDefault}`}
-            title="Ajustar imagem aos limites da visão atual"
+            title="Enquadrar imagem — restaura o enquadramento da calibração quando disponível"
           >
             Enquadrar
           </button>
