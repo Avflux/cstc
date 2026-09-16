@@ -747,7 +747,7 @@ export function GraphCanvasView({
             onClick={() => onToggleImageAdjust(false)}
             className="px-2.5 py-1 rounded bg-white text-amber-900 font-bold text-[11px] shadow hover:bg-amber-100 active:scale-95 transition"
           >
-            Bloquear no Grafo (Esc)
+            Esc
           </button>
         </div>
       )}
