@@ -262,6 +262,10 @@ function AppContent() {
           onHighlightNode={handleHighlightFromTable}
           onDeleteNode={handleDeleteNode}
           onAddMeasurement={handleAddManualMeasurement}
+          calibrateMode={calibrateMode}
+          calibPoints={calibPoints}
+          onCancelCalibrate={cancelCalibrate}
+          onApplyCalibrate={applyCalibrate}
         />
       </main>
     </div>

@@ -2,12 +2,17 @@ import { useState, useMemo } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import MeasurementsTable from './MeasurementsTable'
 import TelemetrySummary from './TelemetrySummary'
+import CalibrationPanel from './CalibrationPanel'
 
 export default function MeasurementsSidebar({
   measurements,
   onHighlightNode,
   onDeleteNode,
   onAddMeasurement,
+  calibrateMode,
+  calibPoints,
+  onCancelCalibrate,
+  onApplyCalibrate,
 }) {
   const [filter, setFilter] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
@@ -55,6 +60,15 @@ export default function MeasurementsSidebar({
 
   return (
     <aside className={`w-full lg:w-[32%] xl:w-[28%] flex flex-col h-full z-10 overflow-hidden border-t lg:border-t-0 ${isDark ? 'bg-[#0c121e]' : 'bg-white'}`} data-purpose="measurements-sidebar">
+      {/* Calibration panel — acima da Tabela de Medições */}
+      {calibrateMode && (
+        <CalibrationPanel
+          calibPoints={calibPoints}
+          onConfirm={onApplyCalibrate}
+          onCancel={onCancelCalibrate}
+        />
+      )}
+
       {/* Sidebar Header & Search Filter */}
       <div className={`p-3 border-b shrink-0 ${isDark ? 'bg-[#0e1626] border-[#1e2a3f]' : 'bg-slate-50 border-slate-200'}`}>
         <div className="flex items-center justify-between mb-2">
