@@ -181,17 +181,16 @@ y=0 (U mínimo)
 ```mermaid
 flowchart TD
     A[Imagem recebida] --> B[Decodificar com OpenCV]
-    B --> C[Converter BGR → HSV]
-    C --> D["Máscara: inRange(h_min, h_max, sat_min, val_min)"]
-    D --> E[Morfologia CLOSE — fechar buracos na linha]
-    E --> F[Morfologia OPEN — remover ruído isolado]
-    F --> G[findContours]
-    G --> H[Selecionar maior contorno]
-    H --> I[Ordenar pontos da esquerda para a direita]
-    I --> J[Mediana por coluna x — suavizar espessura]
-    J --> K[Amostrar N pontos uniformemente]
-    K --> L[Normalizar para 0~1]
-    L --> M[Retornar JSON com pontos]
+    B --> C[Detectar bbox da grade (eixos X/Y)]
+    C --> D[Converter BGR → HSV]
+    D --> E["Máscara: inRange(h_min, h_max, sat_min, val_min)"]
+    E --> F[Morfologia CLOSE + OPEN]
+    F --> G[Manter componentes relevantes — descartar ruído]
+    G --> H[Centro de cada trecho azul por coluna — linha de centro]
+    H --> I[Interpolar lacunas + suavizar]
+    I --> J[Amostrar N pontos com interpolação sub-pixel]
+    J --> K[Normalizar para 0~1]
+    K --> L[Retornar JSON com pontos]
 ```
 
 ---

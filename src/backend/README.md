@@ -141,18 +141,30 @@ y=0 (U mínimo)
 ```mermaid
 flowchart TD
     A[Imagem recebida] --> B[Decodificar com OpenCV]
-    B --> C[Converter BGR → HSV]
-    C --> D["Máscara: inRange(h_min, h_max, sat_min, val_min)"]
-    D --> E[Morfologia CLOSE — fechar buracos na linha]
-    E --> F[Morfologia OPEN — remover ruído isolado]
-    F --> G[findContours]
-    G --> H[Selecionar maior contorno]
-    H --> I[Ordenar pontos da esquerda para a direita]
-    I --> J[Mediana por coluna x — suavizar espessura]
-    J --> K[Amostrar N pontos uniformemente]
-    K --> L[Normalizar para 0~1]
-    L --> M[Retornar JSON com pontos]
+    B --> C[Detectar bbox da grade (eixos X/Y)]
+    C --> D[Converter BGR → HSV]
+    D --> E["Máscara: inRange(h_min, h_max, sat_min, val_min)"]
+    E --> F[Morfologia CLOSE + OPEN]
+    F --> G[Manter componentes relevantes — descartar ruído]
+    G --> H[Centro de cada trecho azul por coluna — linha de centro]
+    H --> I[Interpolar lacunas + suavizar]
+    I --> J[Amostrar N pontos com interpolação sub-pixel]
+    J --> K[Normalizar para 0~1]
+    K --> L[Retornar JSON com pontos]
 ```
+
+---
+
+## Alinhamento dos pontos
+
+Os pontos são extraídos da **linha de centro** do traço azul: em cada coluna de
+pixels, o detector toma o ponto médio do trecho contínuo de azul (em vez dos
+pixels do contorno). Isso evita o viés sistemático que empurrava os pontos para
+a borda da linha em trechos inclinados e sobre os marcadores.
+
+O trecho de azul mais coerente com a coluna anterior é escolhido, o que também
+faz o detector seguir uma única curva mesmo com marcadores grandes ou pequenas
+falhas no traço.
 
 ---
 
