@@ -1,0 +1,20 @@
+# Dependências do Backend – GrafoCurva OpenCV API
+#
+# Instalar com:
+#   pip install -r requirements.txt
+#
+# Recomendado: usar um ambiente virtual (venv ou conda)
+#   python -m venv .venv
+#   .venv\Scripts\activate      (Windows)
+#   pip install -r requirements.txt
+
+# --- Servidor Web ---
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# --- Processamento de Imagem ---
+opencv-python>=4.9.0.80
+numpy>=1.26.0
+
+# --- Upload de arquivos (multipart/form-data) ---
+python-multipart>=0.0.9

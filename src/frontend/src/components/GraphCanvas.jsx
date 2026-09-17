@@ -704,8 +704,19 @@ export default function GraphCanvas({
     draw()
   }, [loadedImage, worldToScreen, draw])
 
-  return { resetZoom, resetImageBounds, zoomImage, highlightNode, applyCalibration, canvasRef, wrapperRef }
+  const applyAutoBounds = useCallback((bounds) => {
+    if (!bounds) return
+    imageBoundsRef.current = { ...bounds }
+    calibrationRef.current = {
+      bounds: { ...bounds },
+      isAuto: true,
+    }
+    draw()
+  }, [draw])
+
+  return { resetZoom, resetImageBounds, zoomImage, highlightNode, applyCalibration, applyAutoBounds, canvasRef, wrapperRef, getView: () => ({ ...viewRef.current }) }
 }
+
 
 
 // ─── GraphCanvasView ──────────────────────────────────────────────────────────

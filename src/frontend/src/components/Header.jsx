@@ -30,7 +30,7 @@ function ThemeToggleButton() {
   )
 }
 
-export default function Header({ onImageUpload, onExport }) {
+export default function Header({ onImageUpload, onExport, onDetectCurve, isDetecting }) {
   const { isDark } = useTheme()
 
   const handleFullscreen = () => {
@@ -80,6 +80,29 @@ export default function Header({ onImageUpload, onExport }) {
             <polyline points="21 15 16 10 5 21" />
           </svg>
           <span className="hidden lg:inline">Carregar Imagem</span>
+        </button>
+
+        {/* Botão: Detectar Curva via OpenCV */}
+        <button
+          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 border ${
+            isDetecting
+              ? 'bg-cyan-700 border-cyan-500 text-white animate-pulse cursor-wait'
+              : isDark
+                ? 'bg-[#0b1e2e] hover:bg-[#112d42] border-[#1a4060] text-cyan-300'
+                : 'bg-cyan-50 hover:bg-cyan-100 border-cyan-300 text-cyan-700'
+          }`}
+          title="Enviar imagem para detecção automática da linha azul via OpenCV (backend)"
+          onClick={onDetectCurve}
+          disabled={isDetecting}
+        >
+          {/* Ícone: scan / olho */}
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span className="hidden lg:inline">
+            {isDetecting ? 'Detectando...' : 'Detectar Curva (CV)'}
+          </span>
         </button>
 
         <button
