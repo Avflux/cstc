@@ -30,7 +30,7 @@ H_MIN, H_MAX, SAT_MIN, VAL_MIN = 80, 150, 50, 20
 BLUE_BGR = (200, 60, 30)
 
 
-def _build_synthetic_plot() -> tuple[np.ndarray, np.ndarray]:
+def _build_synthetic_plot(curve_bgr=BLUE_BGR) -> tuple[np.ndarray, np.ndarray]:
     """Gera o grafo sintético e devolve (imagem, curva_de_referência_em_px)."""
     w, h = 800, 600
     img = np.full((h, w, 3), 255, dtype=np.uint8)
@@ -65,11 +65,11 @@ def _build_synthetic_plot() -> tuple[np.ndarray, np.ndarray]:
     curve_px = np.column_stack([px, py])
 
     pts = np.round(curve_px).astype(np.int32)
-    cv2.polylines(img, [pts], False, BLUE_BGR, 3, cv2.LINE_AA)
+    cv2.polylines(img, [pts], False, curve_bgr, 3, cv2.LINE_AA)
 
     # Marcadores (bolinhas maiores) periódicos, como no gráfico real
     for i in range(0, len(pts), 15):
-        cv2.circle(img, tuple(pts[i]), 5, BLUE_BGR, -1, cv2.LINE_AA)
+        cv2.circle(img, tuple(pts[i]), 5, curve_bgr, -1, cv2.LINE_AA)
 
     return img, curve_px
 
@@ -81,6 +81,28 @@ def _blue_mask(img: np.ndarray) -> np.ndarray:
         np.array([H_MIN, SAT_MIN, VAL_MIN], np.uint8),
         np.array([H_MAX, 255, 255], np.uint8),
     )
+
+
+def _wrapped_hue_mask(img: np.ndarray, h_min: int, h_max: int) -> np.ndarray:
+    """Máscara de matiz que pode cruzar o 0/179 (mesma convenção do backend)."""
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    if h_min <= h_max:
+        return cv2.inRange(
+            hsv,
+            np.array([h_min, SAT_MIN, VAL_MIN], np.uint8),
+            np.array([h_max, 255, 255], np.uint8),
+        )
+    mask_hi = cv2.inRange(
+        hsv,
+        np.array([h_min, SAT_MIN, VAL_MIN], np.uint8),
+        np.array([179, 255, 255], np.uint8),
+    )
+    mask_lo = cv2.inRange(
+        hsv,
+        np.array([0, SAT_MIN, VAL_MIN], np.uint8),
+        np.array([h_max, 255, 255], np.uint8),
+    )
+    return cv2.bitwise_or(mask_hi, mask_lo)
 
 
 def _distance_to_polyline(points: np.ndarray, poly: np.ndarray) -> np.ndarray:
@@ -148,6 +170,29 @@ def test_points_lie_on_blue_curve():
     assert max_interior <= 2.0, f"desvio de {max_interior:.2f}px no interior é grande demais"
 
 
+def test_detects_red_curve_with_wrapped_hue():
+    """Uma linha vermelha usa faixa de matiz que cruza o 0/179 (h_min > h_max)."""
+    img, _ = _build_synthetic_plot(curve_bgr=(0, 0, 255))  # vermelho
+    ok, buf = cv2.imencode(".png", img)
+    assert ok
+
+    # vermelho ≈ matiz 0 → ±25 cruza o 0/179 → hMin=155, hMax=25
+    result = detect_blue_curve(buf.tobytes(), max_points=40, h_min=155, h_max=25)
+
+    assert result["error"] == "", result["error"]
+    assert result["points_count"] == 40
+
+    bbox = result["plot_bbox"]
+    mask = _wrapped_hue_mask(img, 155, 25)
+    inside = 0
+    for p in result["points"]:
+        xi = int(round(bbox["x_left"] + p["x"] * bbox["width"]))
+        yi = int(round(bbox["y_top"] + (1.0 - p["y"]) * bbox["height"]))
+        inside += mask[yi, xi] > 0
+
+    assert inside == result["points_count"], f"{inside}/{result['points_count']} sobre o vermelho"
+
+
 def test_ignores_distant_blue_noise():
     """Uma mancha azul isolada não pode arrastar a curva nem criar pontos nela."""
     img, _ = _build_synthetic_plot()
@@ -174,5 +219,6 @@ def test_ignores_distant_blue_noise():
 
 if __name__ == "__main__":
     test_points_lie_on_blue_curve()
+    test_detects_red_curve_with_wrapped_hue()
     test_ignores_distant_blue_noise()
-    print("OK — pontos alinhados com a curva azul e ruído ignorado.")
+    print("OK — pontos alinhados, cor arbitrária e ruído distante ignorado.")

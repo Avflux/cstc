@@ -91,7 +91,7 @@ export default function Header({ onImageUpload, onExport, onDetectCurve, isDetec
                 ? 'bg-[#0b1e2e] hover:bg-[#112d42] border-[#1a4060] text-cyan-300'
                 : 'bg-cyan-50 hover:bg-cyan-100 border-cyan-300 text-cyan-700'
           }`}
-          title="Enviar imagem para detecção automática da linha azul via OpenCV (backend)"
+          title="Escolher imagem, informar a cor da linha e a quantidade de pontos para detecção via OpenCV (backend)"
           onClick={onDetectCurve}
           disabled={isDetecting}
         >

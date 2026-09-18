@@ -38,9 +38,10 @@ else:
 app = FastAPI(
     title="GrafoCurva OpenCV API",
     description=(
-        "Detecção automática de curvas traçadas em azul em imagens "
-        "de grafos de excitação (log-log). Retorna pontos normalizados "
-        "[0,1] prontos para mapeamento no espaço U(V) × Io(mA)."
+        "Detecção automática de curvas coloridas em imagens de grafos de "
+        "excitação (log-log). A cor da linha é definida pela faixa de matiz "
+        "HSV (h_min/h_max). Retorna pontos normalizados [0,1] prontos para "
+        "mapeamento no espaço U(V) × Io(mA)."
     ),
     version="1.0.0",
 )
@@ -66,14 +67,17 @@ def health():
     return {"status": "ok", "service": "GrafoCurva OpenCV API"}
 
 
-@app.post("/detect-curve", summary="Detectar linha azul na imagem", tags=["Detecção"])
+@app.post("/detect-curve", summary="Detectar a linha da imagem", tags=["Detecção"])
 async def detect_curve(
     file: UploadFile = File(..., description="Imagem do grafo (PNG, JPG, BMP…)"),
     max_points: int = Query(
         50, ge=5, le=500, description="Número máximo de pontos amostrados"
     ),
     h_min: int = Query(
-        80, ge=0, le=179, description="Matiz HSV mínimo (OpenCV: 0-179)"
+        80,
+        ge=0,
+        le=179,
+        description="Matiz HSV mínimo (OpenCV: 0-179). Se for maior que h_max, a faixa cruza o vermelho.",
     ),
     h_max: int = Query(
         150, ge=0, le=179, description="Matiz HSV máximo (OpenCV: 0-179)"
@@ -83,7 +87,7 @@ async def detect_curve(
 ):
     """
     Recebe uma imagem via multipart/form-data e retorna os pontos da curva
-    traçada em azul, normalizados no intervalo [0, 1].
+    traçada na cor informada por `h_min`/`h_max`, normalizados no intervalo [0, 1].
 
     - **x** → posição horizontal normalizada (0 = esquerda / menor Io, 1 = direita / maior Io)
     - **y** → posição vertical normalizada (0 = baixo / menor U, 1 = cima / maior U)
@@ -115,7 +119,7 @@ async def detect_curve(
         raise HTTPException(
             status_code=422,
             detail=f"Detecção falhou: {result['error']}. "
-            "Verifique se a imagem contém uma linha na cor azul e ajuste os parâmetros h_min/h_max.",
+            "Verifique a cor escolhida para a linha e ajuste os parâmetros h_min/h_max.",
         )
 
     return JSONResponse(content=result)

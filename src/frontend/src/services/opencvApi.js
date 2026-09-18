@@ -66,6 +66,58 @@ export async function detectBlueCurve(imageFile, {
 }
 
 /**
+ * Converte uma cor hexadecimal para HSV no formato do OpenCV.
+ *
+ * O matiz (H) do OpenCV vai de 0 a 179 (metade do padrão 0–360°).
+ *
+ * @param {string} hex - Cor no formato "#rrggbb"
+ * @returns {{ h: number, s: number, v: number }} H em 0–179, S e V em 0–255
+ */
+export function hexToHsv(hex) {
+  const clean = String(hex).replace('#', '')
+  const r = parseInt(clean.slice(0, 2), 16) / 255
+  const g = parseInt(clean.slice(2, 4), 16) / 255
+  const b = parseInt(clean.slice(4, 6), 16) / 255
+
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const delta = max - min
+
+  let hue = 0
+  if (delta !== 0) {
+    if (max === r) hue = 60 * (((g - b) / delta) % 6)
+    else if (max === g) hue = 60 * ((b - r) / delta + 2)
+    else hue = 60 * ((r - g) / delta + 4)
+  }
+  if (hue < 0) hue += 360
+
+  return {
+    h: Math.round(hue / 2),
+    s: Math.round((max === 0 ? 0 : delta / max) * 255),
+    v: Math.round(max * 255),
+  }
+}
+
+/**
+ * Faixa de matiz (OpenCV) em torno da cor escolhida para a linha.
+ *
+ * Quando a faixa cruza o 0/179 (cores quentes, como o vermelho), o retorno tem
+ * `hMin > hMax` — o backend interpreta isso como uma faixa circular.
+ *
+ * @param {string} hex - Cor no formato "#rrggbb"
+ * @param {number} [tolerance=25] - Meia-largura da faixa, em unidades de matiz
+ * @returns {{ hMin: number, hMax: number, saturation: number }} Faixa para o backend
+ */
+export function hexToHueRange(hex, tolerance = 25) {
+  const { h, s } = hexToHsv(hex)
+  return {
+    hMin: (h - tolerance + 180) % 180,
+    hMax: (h + tolerance) % 180,
+    saturation: s,
+  }
+}
+
+/**
  * Verifica se o backend está acessível.
  * Útil para dar feedback ao usuário antes de tentar o upload.
  *

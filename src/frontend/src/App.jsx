@@ -4,6 +4,7 @@ import Header from './components/Header'
 import GraphToolbar from './components/GraphToolbar'
 import GraphCanvas, { GraphCanvasView } from './components/GraphCanvas'
 import MeasurementsSidebar from './components/MeasurementsSidebar'
+import DetectCurveDialog from './components/DetectCurveDialog'
 import { initialNodes, initialEdges } from './data/initialData'
 import { detectBlueCurve, checkBackendHealth } from './services/opencvApi'
 
@@ -31,6 +32,7 @@ function AppContent() {
   const [calibPoints, setCalibPoints] = useState([])
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectError, setDetectError] = useState(null)
+  const [detectFile, setDetectFile] = useState(null)
 
   const measurements = nodes.map((node) => ({
     id: `${node.id} - ${node.label}`,
@@ -206,91 +208,103 @@ function AppContent() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link)
   }
 
-  // ── Detecção de curva azul via backend OpenCV ──────────────────────────────
+  // ── Detecção de curva via backend OpenCV ──────────────────────────────────
+  // Ao escolher a imagem, abre o diálogo de configuração (cor da linha e
+  // quantidade de pontos) antes de enviar para o processamento.
   const handleDetectCurve = () => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    input.onchange = async (e) => {
+    input.onchange = (e) => {
       const file = e.target.files?.[0]
       if (!file) return
-
-      // Verificar se o backend está acessível antes de processar
-      const backendOk = await checkBackendHealth()
-      if (!backendOk) {
-        alert(
-          'Backend OpenCV não encontrado em http://localhost:8000.\n\n' +
-          'Inicie o backend com:\n  cd src/backend\n  python main.py'
-        )
-        return
-      }
-
-      setIsDetecting(true)
       setDetectError(null)
-
-      try {
-        // Chama o backend e recebe pontos normalizados [0,1] e limites auto-calibrados
-        const result = await detectBlueCurve(file, { maxPoints: 50 })
-
-        if (!result.points || result.points.length === 0) {
-          throw new Error(result.error || 'Nenhum ponto detectado. Verifique a imagem.')
-        }
-
-        // Carrega a imagem como fundo do gráfico com calibração automática
-        const reader = new FileReader()
-        reader.onload = (ev) => {
-          const img = new Image()
-          img.onload = () => {
-            setLoadedImage(img)
-            if (result.image_bounds) {
-              graphControls.applyAutoBounds(result.image_bounds)
-            }
-            setTriggerRedraw((n) => n + 1)
-          }
-          img.src = ev.target.result
-        }
-        reader.readAsDataURL(file)
-
-        // Mapear coordenadas normalizadas da grade [0, 1] para a escala log-log (1 a 10000: 4 décadas)
-        // pt.x = 0 -> Io = 1 mA,      pt.x = 1 -> Io = 10000 mA
-        // pt.y = 0 -> U = 1 V,        pt.y = 1 -> U = 10000 V
-        const newNodes = result.points.map((pt) => {
-          nodeCounter++
-          const k = Math.pow(10, pt.x * 4)
-          const u = Math.pow(10, pt.y * 4)
-          return {
-            id: `CV${nodeCounter.toString().padStart(2, '0')}`,
-            label: `CV ${nodeCounter}`,
-            k,
-            u,
-            bay1: false,
-          }
-        })
-
-        // Inserir nós e construir arestas conectando-os em sequência
-        setNodes((prev) => {
-          const startIdx = prev.length
-          const arestas = newNodes
-            .map((_, i) =>
-              i < newNodes.length - 1 ? [startIdx + i, startIdx + i + 1] : null
-            )
-            .filter(Boolean)
-          setTimeout(() => {
-            setEdges((prevEdges) => [...prevEdges, ...arestas])
-          }, 0)
-          return [...prev, ...newNodes]
-        })
-
-        setTriggerRedraw((n) => n + 1)
-      } catch (err) {
-        const msg = err.message ?? 'Erro desconhecido'
-        setDetectError(msg)
-        alert(`Erro na detecção OpenCV:\n${msg}`)
-      } finally {
-        setIsDetecting(false)
-      }
+      setDetectFile(file)
     }
     input.click()
+  }
+
+  const handleCancelDetect = () => setDetectFile(null)
+
+  const handleConfirmDetect = async (options) => {
+    const file = detectFile
+    setDetectFile(null)
+    if (!file) return
+
+    // Verificar se o backend está acessível antes de processar
+    const backendOk = await checkBackendHealth()
+    if (!backendOk) {
+      alert(
+        'Backend OpenCV não encontrado em http://localhost:8000.\n\n' +
+        'Inicie o backend com:\n  cd src/backend\n  python main.py'
+      )
+      return
+    }
+
+    setIsDetecting(true)
+    setDetectError(null)
+
+    try {
+      // Chama o backend e recebe pontos normalizados [0,1] e limites auto-calibrados
+      const result = await detectBlueCurve(file, options)
+
+      if (!result.points || result.points.length === 0) {
+        throw new Error(result.error || 'Nenhum ponto detectado. Verifique a imagem.')
+      }
+
+      // Carrega a imagem como fundo do gráfico com calibração automática
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const img = new Image()
+        img.onload = () => {
+          setLoadedImage(img)
+          if (result.image_bounds) {
+            graphControls.applyAutoBounds(result.image_bounds)
+          }
+          setTriggerRedraw((n) => n + 1)
+        }
+        img.src = ev.target.result
+      }
+      reader.readAsDataURL(file)
+
+      // Mapear coordenadas normalizadas da grade [0, 1] para a escala log-log (1 a 10000: 4 décadas)
+      // pt.x = 0 -> Io = 1 mA,      pt.x = 1 -> Io = 10000 mA
+      // pt.y = 0 -> U = 1 V,        pt.y = 1 -> U = 10000 V
+      const newNodes = result.points.map((pt) => {
+        nodeCounter++
+        const k = Math.pow(10, pt.x * 4)
+        const u = Math.pow(10, pt.y * 4)
+        return {
+          id: `CV${nodeCounter.toString().padStart(2, '0')}`,
+          label: `CV ${nodeCounter}`,
+          k,
+          u,
+          bay1: false,
+        }
+      })
+
+      // Inserir nós e construir arestas conectando-os em sequência
+      setNodes((prev) => {
+        const startIdx = prev.length
+        const arestas = newNodes
+          .map((_, i) =>
+            i < newNodes.length - 1 ? [startIdx + i, startIdx + i + 1] : null
+          )
+          .filter(Boolean)
+        setTimeout(() => {
+          setEdges((prevEdges) => [...prevEdges, ...arestas])
+        }, 0)
+        return [...prev, ...newNodes]
+      })
+
+      setTriggerRedraw((n) => n + 1)
+    } catch (err) {
+      const msg = err.message ?? 'Erro desconhecido'
+      setDetectError(msg)
+      alert(`Erro na detecção OpenCV:\n${msg}`)
+    } finally {
+      setIsDetecting(false)
+    }
   }
 
   return (
@@ -360,6 +374,14 @@ function AppContent() {
           onApplyCalibrate={applyCalibrate}
         />
       </main>
+
+      {detectFile && (
+        <DetectCurveDialog
+          fileName={detectFile.name}
+          onCancel={handleCancelDetect}
+          onConfirm={handleConfirmDetect}
+        />
+      )}
     </div>
   )
 }

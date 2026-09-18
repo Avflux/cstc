@@ -17,6 +17,32 @@ except ImportError:
     from plot_detector import detect_plot_bbox
 
 
+def _color_mask(
+    hsv: np.ndarray, h_min: int, h_max: int, sat_min: int, val_min: int
+) -> np.ndarray:
+    """
+    Constrói a máscara da cor da linha a partir dos limites HSV.
+
+    Quando `h_min > h_max`, a faixa de matiz cruza o 0/179 (caso do vermelho):
+    duas faixas complementares são somadas, pois o OpenCV não faz esse "wrap"
+    automaticamente em um único `inRange`.
+    """
+    if h_min <= h_max:
+        lower = np.array([h_min, sat_min, val_min], dtype=np.uint8)
+        upper = np.array([h_max, 255, 255], dtype=np.uint8)
+        return cv2.inRange(hsv, lower, upper)
+
+    lower_hi = np.array([h_min, sat_min, val_min], dtype=np.uint8)
+    upper_hi = np.array([179, 255, 255], dtype=np.uint8)
+    lower_lo = np.array([0, sat_min, val_min], dtype=np.uint8)
+    upper_lo = np.array([h_max, 255, 255], dtype=np.uint8)
+
+    return cv2.bitwise_or(
+        cv2.inRange(hsv, lower_hi, upper_hi),
+        cv2.inRange(hsv, lower_lo, upper_lo),
+    )
+
+
 def _main_curve_mask(
     mask: np.ndarray, bridge_ratio: float = 0.02, min_bridge: int = 5
 ) -> np.ndarray:
@@ -148,11 +174,9 @@ def detect_blue_curve(
     plot_w = grid_info["plot_w"]
     plot_h = grid_info["plot_h"]
 
-    # 3. Converter para HSV e extrair a curva azul dentro da grade
+    # 3. Converter para HSV e extrair a curva (cor escolhida) dentro da grade
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    lower_blue = np.array([h_min, sat_min, val_min], dtype=np.uint8)
-    upper_blue = np.array([h_max, 255, 255], dtype=np.uint8)
-    mask = cv2.inRange(hsv, lower_blue, upper_blue)
+    mask = _color_mask(hsv, h_min, h_max, sat_min, val_min)
 
     # Recortar máscara para o interior da grade (evita ruídos fora do gráfico)
     mask_grid = mask[y_t:y_b, x_l:x_r].copy()
@@ -167,7 +191,10 @@ def detect_blue_curve(
             "mask_pixels": 0,
             "plot_bbox": grid_info,
             "image_bounds": grid_info["image_bounds"],
-            "error": "Nenhum pixel azul encontrado dentro da grade do gráfico.",
+            "error": (
+                "Nenhum pixel da cor selecionada encontrado dentro da grade "
+                f"do gráfico (h_min={h_min}, h_max={h_max})."
+            ),
         }
 
     # 4. Operações morfológicas: fechar pequenas falhas do traço e remover ruído

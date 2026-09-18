@@ -83,10 +83,14 @@ Recebe uma imagem e retorna os pontos da curva azul detectada.
 | Parâmetro | Padrão | Descrição |
 |-----------|--------|-----------|
 | `max_points` | `50` | Número máximo de pontos retornados (5–500) |
-| `h_min` | `100` | Matiz HSV mínimo do azul (0–179) |
-| `h_max` | `140` | Matiz HSV máximo do azul (0–179) |
-| `sat_min` | `80` | Saturação mínima (0–255) |
-| `val_min` | `30` | Brilho mínimo (0–255) — use baixo para azul escuro/navy |
+| `h_min` | `80` | Matiz HSV mínimo da cor da linha (0–179) |
+| `h_max` | `150` | Matiz HSV máximo da cor da linha (0–179) |
+| `sat_min` | `50` | Saturação mínima (0–255) |
+| `val_min` | `20` | Brilho mínimo (0–255) — use baixo para cores escuras |
+
+> **Cores quentes (vermelho):** se `h_min > h_max`, a faixa de matiz cruza o
+> 0/179 (convenção circular) e o detector soma as duas faixas complementares.
+> O frontend gera esses valores automaticamente a partir da cor escolhida.
 
 **Exemplo de chamada (curl):**
 ```bash

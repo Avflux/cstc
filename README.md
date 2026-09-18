@@ -86,6 +86,13 @@ Acesse [http://127.0.0.1:5173/](http://127.0.0.1:5173/). O servidor Vite atualiz
 a página automaticamente durante as alterações no código. Para encerrá-lo,
 pressione `Ctrl+C`.
 
+### Detecção de curva (CV)
+
+O botão **Detectar Curva (CV)** abre o seletor de arquivo; depois de escolher a
+imagem, uma janela pede **a cor da linha** e **a quantidade de pontos** antes de
+enviar para o backend. A cor escolhida é convertida em faixa de matiz HSV
+(±25 em torno do matiz, no padrão 0–179 do OpenCV).
+
 **Outros comandos do frontend:**
 
 ```bash
@@ -121,10 +128,13 @@ Recebe uma imagem e retorna os pontos da curva azul detectada.
 | Parâmetro | Padrão | Descrição |
 |-----------|--------|-----------|
 | `max_points` | `50` | Número máximo de pontos retornados (5–500) |
-| `h_min` | `100` | Matiz HSV mínimo do azul (0–179) |
-| `h_max` | `140` | Matiz HSV máximo do azul (0–179) |
-| `sat_min` | `80` | Saturação mínima (0–255) |
-| `val_min` | `30` | Brilho mínimo (0–255) — use baixo para azul escuro/navy |
+| `h_min` | `80` | Matiz HSV mínimo da cor da linha (0–179) |
+| `h_max` | `150` | Matiz HSV máximo da cor da linha (0–179) |
+| `sat_min` | `50` | Saturação mínima (0–255) |
+| `val_min` | `20` | Brilho mínimo (0–255) — use baixo para cores escuras |
+
+> **Cores quentes (vermelho):** se `h_min > h_max`, a faixa de matiz cruza o
+> 0/179 e o detector soma as duas faixas complementares.
 
 **Exemplo (curl):**
 
